@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>钓鱼佬Mike的钓鱼宝典🎣（私は最高です！）</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #cbd5e1; font-family: "Segoe UI", sans-serif; padding-bottom: 80px;}
+        .glass { background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+        .fish-card { background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; }
+        
+        .mike-badge { background: linear-gradient(90deg, #ea580c, #ca8a04); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 900; }
+        .fish-img-box { width: 56px; height: 56px; background: #020617; border-radius: 8px; overflow: hidden; border: 2px solid #334155; position: relative; flex-shrink: 0; }
+        .fish-img-box img { width: 100%; height: 100%; object-fit: cover; }
+        .modal-mask { position: fixed; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.95); display: flex; align-items: center; justify-content: center; }
+        
+        /* 裁切器 */
+        #cropper-canvas-container { 
+            cursor: crosshair; overflow: auto; position: relative; width: 100%; height: 100%;
+            background-image: linear-gradient(45deg, #1e293b 25%, transparent 25%), linear-gradient(-45deg, #1e293b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e293b 75%), linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+            background-size: 40px 40px; 
+        }
+        .crop-box { position: absolute; border: 2px solid #fbbf24; background: rgba(251, 191, 36, 0.3); pointer-events: none; display: none; z-index: 10; box-shadow: 0 0 15px rgba(0,0,0,0.8); }
+        
+        .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
+        .rod-ice-light { background: #075985; color: #bae6fd; border: 1px solid #0ea5e9; }
+        .rod-ice-heavy { background: #7f1d1d; color: #fecaca; border: 1px solid #ef4444; }
+        .rod-river-light { background: #166534; color: #bbf7d0; border: 1px solid #22c55e; }
+        .rod-river-heavy { background: #713f12; color: #fef08a; border: 1px solid #ca8a04; }
+        
+        /* 状态条 */
+        .filter-status { border-left: 4px solid #3b82f6; }
+        
+        /* 秘籍重点 */
+        .highlight { color: #fbbf24; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col bg-[#0b0f19] border-x border-gray-800 relative">
+        <header class="glass p-4 sticky top-0 z-50 shadow-2xl">
+            <div class="flex justify-between items-start mb-3">
+                <h1 class="text-lg font-extrabold text-white flex flex-col leading-tight">
+                    <span>钓鱼佬Mike的钓鱼宝典🎣</span>
+                    <span class="text-[10px] text-yellow-500 font-normal">（私は最高です！）</span>
+                </h1>
+                <div class="text-right">
+                    <div class="text-2xl font-mono font-bold text-blue-400 leading-none">{{ currentTimeStr }}</div>
+                    <button @click="showHelp = true" class="text-[10px] bg-blue-900 text-blue-200 px-2 py-0.5 rounded mt-1 border border-blue-700 hover:bg-blue-800">📖 使用说明书</button>
+                </div>
+            </div>
+            
+            <div class="flex gap-2 mb-3">
+                <button @click="showMap = true" class="flex-1 bg-slate-700 text-white text-xs font-bold py-2.5 rounded-lg border border-slate-600">🗺️ 地图</button>
+                <button @click="showAddFish = true" class="flex-1 bg-green-700 text-white text-xs font-bold py-2.5 rounded-lg border border-green-600 flex items-center justify-center gap-1">➕ 添加新鱼</button>
+                <button @click="toggleMode" :class="['flex-1 text-xs font-bold py-2.5 rounded-lg border', viewMode === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-gray-400']">{{ viewMode === 'all' ? '📚 全图鉴' : '🔙 实时筛选' }}</button>
+            </div>
+
+            <div v-if="viewMode === 'live'">
+                <div class="bg-slate-900/80 rounded-lg p-2.5 mb-3 border border-slate-800 relative overflow-hidden">
+                    <div class="flex justify-between items-center relative z-10 text-xs text-gray-300">
+                        <span class="font-bold">当前: <span class="text-white">{{ gamePeriod }}</span></span>
+                        <span class="font-mono text-yellow-500 font-bold">刷新: {{ minutesLeft }}分</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-4 gap-2">
+                    <button v-for="w in ['晴天', '雾天', '小雪', '大雪']" :key="w" @click="weather = w" :class="['py-2.5 rounded-lg font-bold text-xs transition-all', weather === w ? 'bg-orange-500 text-white ring-2' : 'bg-slate-800 text-gray-400 hover:bg-slate-700']">{{ w }}</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 p-3 overflow-y-auto">
+            <div v-if="viewMode === 'live'">
+                <div v-if="weather" class="filter-status bg-blue-900/30 p-2 mb-4 rounded-r text-xs text-blue-200 flex justify-between items-center">
+                    <span>🔍 筛选: <strong>{{ formatGamePeriod(gamePeriod) }}</strong> + <strong>{{ weather }}</strong></span>
+                    <span class="bg-blue-800 px-2 py-0.5 rounded text-[10px] text-white">命中: {{ filteredList.length }}</span>
+                </div>
+
+                <div v-if="!weather" class="text-center py-12 text-gray-600"><p class="text-3xl mb-3">👆</p><p class="text-sm">请选择当前天气</p></div>
+                <div v-else-if="filteredList.length === 0" class="text-center py-12 text-gray-600 border-2 border-dashed border-slate-800 rounded-xl"><p class="text-sm">当前无特殊鱼类记录</p></div>
+                <div v-else v-for="(group, locName) in groupedList" :key="locName" class="mb-5">
+                    <div class="text-xs font-bold text-white mb-2 pl-2 border-l-4 border-yellow-500 ml-1 flex justify-between"><span>{{ locName }}</span><span v-if="locName.includes('冰洞')" class="text-[10px] bg-sky-900 text-sky-200 px-1 rounded">需破冰</span></div>
+                    <div v-for="fish in group" :key="fish.name" class="fish-card p-2 rounded-xl mb-2 flex gap-3 items-center relative overflow-hidden">
+                        <div class="fish-img-box">
+                            <img :src="getImageSrc(fish.name)" @error="handleImgError(fish.name)" class="w-full h-full object-cover">
+                            <div v-if="missingImages[fish.name]" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800 transition" @click="openCropper(fish.name)">
+                                <span class="text-xl">✂️</span><span class="text-[8px] text-yellow-500 font-bold">补图</span>
+                            </div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-center mb-1">
+                                <h3 class="font-bold text-white text-base truncate">{{ fish.name }}</h3>
+                                <span :class="['badge shrink-0', getRodStyle(fish.rodType)]">{{ getRodName(fish.rodType) }}</span>
+                            </div>
+                            <div class="text-[10px] text-slate-400 font-mono mt-1">活跃: {{ fish.periods.join(', ') }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="viewMode === 'all'">
+                <div class="text-center mb-4 p-2 bg-indigo-900/20 border border-indigo-900/50 rounded text-indigo-300 text-xs">
+                    <p>全鱼类图鉴 (点击卡片可补图/删除自建)</p>
+                    <p class="opacity-50 mt-1">共 {{ fishDatabase.length }} 种</p>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div v-for="fish in fishDatabase" :key="fish.name" class="fish-card p-2 rounded-lg flex items-center gap-2">
+                        <div class="fish-img-box w-10 h-10">
+                            <img :src="getImageSrc(fish.name)" @error="handleImgError(fish.name)" class="w-full h-full object-cover">
+                            <div v-if="missingImages[fish.name]" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center cursor-pointer border-2 border-dashed border-yellow-600 hover:bg-slate-800" @click="openCropper(fish.name)">
+                                <span class="text-[10px]">✂️</span>
+                            </div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between">
+                                <div class="text-xs font-bold text-gray-200 truncate">{{ fish.name }}</div>
+                                <span v-if="fish.isCustom" class="text-[8px] text-red-400 cursor-pointer" @click="deleteCustomFish(fish.name)">🗑️</span>
+                            </div>
+                            <div class="text-[10px] text-gray-500 truncate">{{ fish.loc }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <div v-if="showHelp" class="modal-mask z-[220]" @click="showHelp = false">
+            <div class="bg-slate-800 w-[90%] max-w-md p-6 rounded-xl border border-slate-600 shadow-2xl" @click.stop>
+                <h3 class="text-xl font-extrabold text-white mb-4 border-b border-gray-600 pb-2">📖 钓鱼佬Mike的独家秘籍</h3>
+                
+                <div class="space-y-4 text-sm text-gray-300 overflow-y-auto max-h-[60vh]">
+                    <div class="bg-blue-900/30 p-3 rounded border-l-4 border-blue-500">
+                        <h4 class="font-bold text-white mb-1">⚡ 玄学爆率时刻</h4>
+                        <p>现实时间每10分钟切换一次时段（如 10分、20分）。<br>
+                        <span class="highlight">重点：</span>在时间交替的瞬间（例如从19分跳到20分时），游戏内时间切换，此时下竿的<span class="highlight">稀有鱼爆率极高</span>！建议卡点抛竿。</p>
+                    </div>
+
+                    <div class="bg-red-900/30 p-3 rounded border-l-4 border-red-500">
+                        <h4 class="font-bold text-white mb-1">⚠️ 严守三大铁律</h4>
+                        <p>想要钓到图鉴上的鱼，必须同时满足三个条件：</p>
+                        <ul class="list-disc pl-4 mt-1 space-y-1">
+                            <li><span class="highlight">天气：</span>必须和游戏内左上角天气一致。</li>
+                            <li><span class="highlight">地点：</span>必须在指定区域（如冰洞、沉船）。</li>
+                            <li><span class="highlight">鱼竿：</span>轻竿只能钓轻竿鱼，重竿只能钓重竿鱼。</li>
+                        </ul>
+                        <p class="text-xs mt-2 opacity-75">*条件不对，神仙也钓不上来。</p>
+                    </div>
+
+                    <div class="bg-green-900/30 p-3 rounded border-l-4 border-green-500">
+                        <h4 class="font-bold text-white mb-1">🛠️ 如何添加与补图</h4>
+                        <ul class="list-disc pl-4 mt-1 space-y-1">
+                            <li><span class="text-white font-bold">加新鱼：</span>点击首页【➕ 添加新鱼】，填好数据会自动保存，永久有效。</li>
+                            <li><span class="text-white font-bold">补图片：</span>点击缺图卡片上的【✂️ 补图】，上传你的全图鉴长图，框选后下载。</li>
+                            <li><span class="text-white font-bold">重要：</span>下载的图片记得拖进本网页所在的文件夹里！</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <button @click="showHelp = false" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-lg mt-6">大师悟了 (关闭)</button>
+            </div>
+        </div>
+
+        <div v-if="showMap" class="modal-mask" @click="showMap = false"><div class="relative w-full h-full flex items-center justify-center p-4"><img src="./map.jpg" class="max-w-full max-h-full object-contain rounded" @click.stop></div></div>
+
+        <div v-if="showCropper" class="modal-mask z-[200]" @click="showCropper = false">
+            <div class="bg-slate-800 w-[95vw] h-[90vh] rounded-xl shadow-2xl overflow-hidden flex flex-col border border-slate-600" @click.stop>
+                <div class="p-3 bg-slate-900 border-b border-slate-700 flex justify-between items-center shrink-0">
+                    <h3 class="font-bold text-white text-lg">✂️ 补图：<span class="text-yellow-400">{{ currentCropFish }}</span></h3>
+                    <div class="flex gap-4 items-center">
+                        <button @click="showCropper = false" class="text-gray-300 hover:text-white px-3 py-1 bg-slate-700 rounded">关闭</button>
+                    </div>
+                </div>
+                <div class="p-2 bg-slate-800 flex gap-2 items-center text-xs shrink-0 border-b border-slate-700">
+                    <input type="file" id="cropperInput" class="hidden" @change="loadCropperImage">
+                    <button onclick="document.getElementById('cropperInput').click()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm">{{ cropperImg ? '📂 换图' : '📂 上传长图' }}</button>
+                    <div class="flex-1"></div>
+                    <span>宽:{{cropW}}</span> <input type="range" v-model="cropW" min="40" max="300" class="w-24 accent-yellow-500">
+                    <span>高:{{cropH}}</span> <input type="range" v-model="cropH" min="40" max="300" class="w-24 accent-green-500">
+                </div>
+                <div class="relative flex-1 bg-black overflow-auto" id="cropper-container">
+                    <div v-if="!cropperImg" class="absolute inset-0 flex items-center justify-center text-gray-500 flex-col"><span class="text-6xl mb-4">🖼️</span><span>请先上传全图鉴长图</span></div>
+                    <div id="cropper-canvas-container" v-show="cropperImg" @mousemove="moveCropBox" @click="executeCrop" @mouseleave="hideCropBox">
+                        <canvas id="cropperCanvas"></canvas>
+                        <div id="cropBox" class="crop-box" :style="{width: cropW+'px', height: cropH+'px'}"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showAddFish" class="modal-mask z-[210]" @click="showAddFish = false">
+            <div class="bg-slate-800 w-80 p-5 rounded-xl border border-slate-600 shadow-2xl" @click.stop>
+                <h3 class="text-lg font-bold text-white mb-2">➕ 添加新鱼 (自动筛选)</h3>
+                <p class="text-xs text-gray-400 mb-4 bg-slate-900 p-2 rounded">注意：添加后，该鱼只会在你勾选的时间和天气下显示！</p>
+                <div class="space-y-3">
+                    <input v-model="newFish.name" placeholder="鱼的名字" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white">
+                    <div class="flex gap-2">
+                        <select v-model="newFish.loc" class="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white">
+                            <option value="冰洞">冰洞</option><option value="河湾">河湾</option><option value="沉船">沉船</option>
+                            <option value="巨石">巨石</option><option value="码头">码头</option><option value="河中央">河中央</option><option value="岸边">岸边</option><option value="全水域">全水域</option>
+                        </select>
+                        <select v-model="newFish.rodType" class="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white">
+                            <option value="common">通用/不限</option>
+                            <option value="ice_light">冰洞-轻竿</option><option value="ice_heavy">冰洞-重竿</option>
+                            <option value="river_light">路亚-轻竿</option><option value="river_heavy">路亚-重竿</option>
+                        </select>
+                    </div>
+                    
+                    <div class="text-xs text-gray-400 mb-1 font-bold text-yellow-500">活跃天气 (必选):</div>
+                    <div class="grid grid-cols-4 gap-2">
+                        <label v-for="w in ['晴天','雾天','小雪','大雪']" :class="['text-center py-1 rounded text-xs cursor-pointer border', newFish.weather.includes(w) ? 'bg-blue-600 border-blue-400 text-white' : 'bg-slate-900 border-slate-700 text-gray-500']">
+                            <input type="checkbox" :value="w" v-model="newFish.weather" class="hidden"> {{w}}
+                        </label>
+                    </div>
+                    <div class="text-xs text-gray-400 mb-1 font-bold text-yellow-500">活跃时段 (必选):</div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <label v-for="p in ['凌晨','清晨','上午','下午','黄昏','深夜']" :class="['text-center py-1 rounded text-xs cursor-pointer border', newFish.periods.includes(p) ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-700 text-gray-500']">
+                            <input type="checkbox" :value="p" v-model="newFish.periods" class="hidden"> {{p}}
+                        </label>
+                    </div>
+
+                    <button @click="saveNewFish" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded mt-2">保存到图鉴</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+
+        const rawData = [
+            // 清晨
+            { name: "飞机头", loc: "冰洞", rodType: "ice_light", weather: ["晴天", "雾天"], periods: ["清晨"] },
+            { name: "粗红线", loc: "冰洞", rodType: "ice_light", weather: ["雾天", "小雪"], periods: ["清晨"] },
+            { name: "路易鱼", loc: "冰洞", rodType: "ice_light", weather: ["晴天", "大雪"], periods: ["清晨"] },
+            { name: "美髯公", loc: "沉船", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["清晨"] },
+            { name: "海底豚", loc: "沉船", rodType: "river_heavy", weather: ["雾天", "小雪"], periods: ["清晨"] },
+            { name: "钱袋", loc: "沉船", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["清晨"] },
+            { name: "戒指", loc: "沉船", rodType: "river_light", weather: ["晴天", "雾天", "小雪", "大雪"], periods: ["清晨"] },
+            { name: "不明化石", loc: "沉船", rodType: "river_heavy", weather: ["晴天", "大雪"], periods: ["清晨"] },
+            { name: "狗头鱼", loc: "巨石", rodType: "river_heavy", weather: ["雾天", "小雪", "大雪"], periods: ["清晨"] },
+            { name: "娃娃鱼", loc: "巨石", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["清晨"] },
+            { name: "奇怪的东西", loc: "巨石", rodType: "river_heavy", weather: ["晴天", "雾天", "小雪", "大雪"], periods: ["清晨"] },
+            { name: "果冻鱼", loc: "巨石", rodType: "river_heavy", weather: ["小雪", "大雪"], periods: ["清晨"] },
+            { name: "拷贝鱼", loc: "码头", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["清晨"] },
+            { name: "地包天鱼", loc: "码头", rodType: "river_heavy", weather: ["雾天", "小雪", "大雪"], periods: ["清晨"] },
+            { name: "骗子鱼", loc: "码头", rodType: "river_heavy", weather: ["雾天", "小雪", "大雪"], periods: ["清晨"] },
+            { name: "鬼虎鱼", loc: "河湾", rodType: "river_heavy", weather: ["小雪", "大雪"], periods: ["清晨"] },
+            { name: "雷鳗", loc: "河湾", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["清晨"] },
+            { name: "冰溜子鱼", loc: "河中央", rodType: "river_light", weather: ["雾天", "大雪"], periods: ["清晨"] },
+            // 上午
+            { name: "蓝眼泪", loc: "冰洞", rodType: "ice_light", weather: ["小雪", "大雪"], periods: ["上午"] },
+            { name: "筷子鳝", loc: "冰洞", rodType: "ice_heavy", weather: ["晴天", "小雪"], periods: ["上午"] },
+            { name: "泥猴子", loc: "冰洞", rodType: "ice_light", weather: ["晴天", "小雪"], periods: ["上午"] },
+            { name: "不明的机械", loc: "沉船", rodType: "river_heavy", weather: ["小雪", "大雪"], periods: ["上午"] },
+            { name: "猪鼻鱼", loc: "巨石", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["上午"] },
+            { name: "夜明珠", loc: "巨石", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["上午"] },
+            { name: "粉丝虾", loc: "码头", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["上午"] },
+            { name: "芭蕾蓬蓬鱼", loc: "河中央", rodType: "river_light", weather: ["晴天"], periods: ["上午"] },
+            { name: "甲方满意鱼", loc: "河中央", rodType: "river_light", weather: ["晴天"], periods: ["上午"] },
+            { name: "拟岩鱼", loc: "河中央", rodType: "river_light", weather: ["晴天", "雾天", "小雪"], periods: ["上午"] },
+            { name: "光斑鱼", loc: "河中央", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["上午"] },
+            { name: "熔岩鱼", loc: "河中央", rodType: "river_heavy", weather: ["晴天"], periods: ["上午"] },
+            { name: "幻光鱼", loc: "岸边", rodType: "river_light", weather: ["晴天"], periods: ["上午"] },
+            { name: "大师龟", loc: "岸边", rodType: "river_light", weather: ["晴天", "小雪"], periods: ["上午"] },
+            { name: "牡丹鱼", loc: "岸边", rodType: "river_light", weather: ["晴天"], periods: ["上午"] },
+            { name: "流浪剑客", loc: "岸边", rodType: "river_light", weather: ["晴天"], periods: ["上午"] },
+            { name: "罗汉鱼", loc: "岸边", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["上午"] },
+            // 下午
+            { name: "水法老", loc: "冰洞", rodType: "ice_heavy", weather: ["雾天", "小雪"], periods: ["下午"] },
+            { name: "大罐子鱼", loc: "冰洞", rodType: "ice_heavy", weather: ["晴天", "小雪"], periods: ["下午"] },
+            { name: "蓝眼泪", loc: "冰洞", rodType: "ice_light", weather: ["小雪", "大雪"], periods: ["下午"] },
+            { name: "泥猴子", loc: "冰洞", rodType: "ice_light", weather: ["晴天", "小雪"], periods: ["下午"] },
+            { name: "路易鱼", loc: "冰洞", rodType: "ice_light", weather: ["晴天", "大雪"], periods: ["下午"] },
+            { name: "夜明珠", loc: "巨石", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["下午"] },
+            { name: "辐射鲈", loc: "码头", rodType: "river_heavy", weather: ["晴天", "雾天", "小雪"], periods: ["下午"] },
+            { name: "粉丝虾", loc: "码头", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["下午"] },
+            { name: "发财鲤", loc: "河湾", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["下午"] },
+            { name: "芭蕾蓬蓬鱼", loc: "河中央", rodType: "river_light", weather: ["晴天"], periods: ["下午"] },
+            { name: "甲方满意鱼", loc: "河中央", rodType: "river_light", weather: ["晴天"], periods: ["下午"] },
+            { name: "拟岩鱼", loc: "河中央", rodType: "river_light", weather: ["晴天", "雾天", "小雪"], periods: ["下午"] },
+            { name: "视觉系", loc: "河中央", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["下午"] },
+            { name: "幻光鱼", loc: "岸边", rodType: "river_light", weather: ["晴天"], periods: ["下午"] },
+            { name: "大师龟", loc: "岸边", rodType: "river_light", weather: ["晴天", "小雪"], periods: ["下午"] },
+            { name: "狼蛛蟹", loc: "岸边", rodType: "river_light", weather: ["雾天", "小雪", "大雪"], periods: ["下午"] },
+            { name: "金蛙", loc: "岸边", rodType: "river_light", weather: ["晴天"], periods: ["下午"] },
+            { name: "流浪剑客", loc: "岸边", rodType: "river_light", weather: ["晴天"], periods: ["下午"] },
+            { name: "平凡鱼", loc: "岸边", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["下午"] },
+            { name: "烟花鱼", loc: "岸边", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["下午"] },
+            { name: "罗汉鱼", loc: "岸边", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["下午"] },
+            // 黄昏
+            { name: "粗红线", loc: "冰洞", rodType: "ice_light", weather: ["雾天", "小雪"], periods: ["黄昏"] },
+            { name: "水法老", loc: "冰洞", rodType: "ice_heavy", weather: ["雾天", "小雪"], periods: ["黄昏"] },
+            { name: "大罐子鱼", loc: "冰洞", rodType: "ice_heavy", weather: ["晴天", "小雪"], periods: ["黄昏"] },
+            { name: "嘟嘟鱼", loc: "冰洞", rodType: "ice_heavy", weather: ["晴天", "小雪"], periods: ["黄昏"] },
+            { name: "筷子鳝", loc: "冰洞", rodType: "ice_heavy", weather: ["晴天", "大雪"], periods: ["黄昏"] },
+            { name: "狗头鱼", loc: "巨石", rodType: "river_heavy", weather: ["雾天", "小雪", "大雪"], periods: ["黄昏"] },
+            { name: "猪鼻鱼", loc: "巨石", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["黄昏"] },
+            { name: "辐射鲈", loc: "码头", rodType: "river_heavy", weather: ["晴天", "雾天", "小雪"], periods: ["黄昏"] },
+            { name: "鬼虎鱼", loc: "河湾", rodType: "river_heavy", weather: ["小雪", "大雪"], periods: ["黄昏"] },
+            { name: "教练鱼", loc: "河湾", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["黄昏"] },
+            { name: "光斑鱼", loc: "河中央", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["黄昏"] },
+            { name: "熔岩鱼", loc: "河中央", rodType: "river_heavy", weather: ["晴天"], periods: ["黄昏"] },
+            { name: "狼蛛蟹", loc: "岸边", rodType: "river_light", weather: ["雾天", "小雪", "大雪"], periods: ["黄昏"] },
+            { name: "金蛙", loc: "岸边", rodType: "river_light", weather: ["晴天"], periods: ["黄昏"] },
+            { name: "牡丹鱼", loc: "岸边", rodType: "river_light", weather: ["晴天"], periods: ["黄昏"] },
+            { name: "平凡鱼", loc: "岸边", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["黄昏"] },
+            { name: "烟花鱼", loc: "岸边", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["黄昏"] },
+            // 深夜
+            { name: "飞机头", loc: "冰洞", rodType: "ice_light", weather: ["晴天", "雾天"], periods: ["深夜"] },
+            { name: "鬼牙鱼", loc: "冰洞", rodType: "ice_heavy", weather: ["雾天", "小雪"], periods: ["深夜"] },
+            { name: "鳅鳅鱼", loc: "冰洞", rodType: "ice_light", weather: ["晴天", "雾天"], periods: ["深夜"] },
+            { name: "七星刀", loc: "冰洞", rodType: "ice_heavy", weather: ["晴天", "雾天"], periods: ["深夜"] },
+            { name: "筷子鳝", loc: "冰洞", rodType: "ice_heavy", weather: ["晴天", "大雪"], periods: ["深夜"] },
+            { name: "鬼刀鱼", loc: "沉船", rodType: "river_heavy", weather: ["雾天", "小雪"], periods: ["深夜"] },
+            { name: "冰河鲟", loc: "沉船", rodType: "river_heavy", weather: ["雾天", "小雪", "大雪"], periods: ["深夜"] },
+            { name: "戒指", loc: "沉船", rodType: "river_light", weather: ["晴天", "雾天", "小雪", "大雪"], periods: ["深夜"] },
+            { name: "不明化石", loc: "沉船", rodType: "river_heavy", weather: ["晴天", "大雪"], periods: ["深夜"] },
+            { name: "黄鸭叫", loc: "巨石", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["深夜"] },
+            { name: "果冻鱼", loc: "巨石", rodType: "river_heavy", weather: ["小雪", "大雪"], periods: ["深夜"] },
+            { name: "地包天鱼", loc: "码头", rodType: "river_heavy", weather: ["雾天", "小雪", "大雪"], periods: ["深夜"] },
+            { name: "骗子鱼", loc: "码头", rodType: "river_heavy", weather: ["雾天", "小雪", "大雪"], periods: ["深夜"] },
+            { name: "保洁鱼", loc: "河湾", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["深夜"] },
+            { name: "呆呆鲶", loc: "河湾", rodType: "river_heavy", weather: ["雾天", "小雪"], periods: ["深夜"] },
+            { name: "教练鱼", loc: "河湾", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["深夜"] },
+            { name: "鳄霸鱼", loc: "河湾", rodType: "river_heavy", weather: ["小雪", "大雪"], periods: ["深夜"] },
+            { name: "冰溜子鱼", loc: "河中央", rodType: "river_light", weather: ["雾天", "大雪"], periods: ["深夜"] },
+            { name: "拳击虾", loc: "岸边", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["深夜"] },
+            // 凌晨
+            { name: "鬼牙鱼", loc: "冰洞", rodType: "ice_heavy", weather: ["雾天", "小雪"], periods: ["凌晨"] },
+            { name: "鳅鳅鱼", loc: "冰洞", rodType: "ice_light", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "七星刀", loc: "冰洞", rodType: "ice_heavy", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "鬼刀鱼", loc: "沉船", rodType: "river_heavy", weather: ["雾天", "小雪"], periods: ["凌晨"] },
+            { name: "美髯公", loc: "沉船", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "海底豚", loc: "沉船", rodType: "river_heavy", weather: ["雾天", "小雪"], periods: ["凌晨"] },
+            { name: "冰河鲟", loc: "沉船", rodType: "river_heavy", weather: ["雾天", "小雪", "大雪"], periods: ["凌晨"] },
+            { name: "钱袋", loc: "沉船", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "不明的机械", loc: "沉船", rodType: "river_heavy", weather: ["小雪", "大雪"], periods: ["凌晨"] },
+            { name: "黄鸭叫", loc: "巨石", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "娃娃鱼", loc: "巨石", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "奇怪的东西", loc: "巨石", rodType: "river_heavy", weather: ["晴天", "雾天", "小雪", "大雪"], periods: ["凌晨"] },
+            { name: "拷贝鱼", loc: "码头", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "保洁鱼", loc: "河湾", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "呆呆鲶", loc: "河湾", rodType: "river_heavy", weather: ["雾天", "小雪"], periods: ["凌晨"] },
+            { name: "鳄霸鱼", loc: "河湾", rodType: "river_heavy", weather: ["小雪", "大雪"], periods: ["凌晨"] },
+            { name: "雷鳗", loc: "河湾", rodType: "river_heavy", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "视觉系", loc: "河中央", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["凌晨"] },
+            { name: "拳击虾", loc: "岸边", rodType: "river_light", weather: ["晴天", "雾天"], periods: ["凌晨"] }
+        ];
+
+        function mergeFishData(data) {
+            const map = {};
+            data.forEach(item => {
+                const key = item.name + '|' + item.loc;
+                if (!map[key]) { map[key] = { ...item }; } 
+                else {
+                    item.periods.forEach(p => { if (!map[key].periods.includes(p)) map[key].periods.push(p); });
+                    item.weather.forEach(w => { if (!map[key].weather.includes(w)) map[key].weather.push(w); });
+                }
+            });
+            return Object.values(map);
+        }
+
+        const defaultFish = mergeFishData(rawData);
+
+        createApp({
+            setup() {
+                const currentTimeStr = ref("");
+                const minutesLeft = ref(0);
+                const gamePeriod = ref("WAIT...");
+                const weather = ref(""); 
+                const showMap = ref(false);
+                const showAddFish = ref(false);
+                const showHelp = ref(false);
+                const viewMode = ref("live");
+                const missingImages = ref({});
+                const tempImages = ref({});
+                const customFishList = ref([]);
+                const fishDatabase = computed(() => [...defaultFish, ...customFishList.value]);
+                const newFish = ref({ name: "", loc: "冰洞", rodType: "common", weather: [], periods: [] });
+                const showCropper = ref(false);
+                const currentCropFish = ref("");
+                const cropperImg = ref(null);
+                const cropW = ref(100);
+                const cropH = ref(70);
+
+                const updateTime = () => {
+                    const now = new Date();
+                    currentTimeStr.value = now.toLocaleTimeString('zh-CN', { hour12: false });
+                    const minutes = now.getMinutes();
+                    let left = 10 - (minutes % 10);
+                    if (now.getSeconds() === 0 && minutes % 10 === 0) left = 10;
+                    minutesLeft.value = left;
+                    const periodIndex = Math.floor(minutes / 10);
+                    const periodMap = ["凌晨", "清晨", "上午", "下午", "黄昏", "深夜"];
+                    gamePeriod.value = `${periodMap[periodIndex]} (${["00-10", "10-20", "20-30", "30-40", "40-50", "50-00"][periodIndex]})`;
+                };
+
+                const loadCustomFish = () => {
+                    const saved = localStorage.getItem('mike_fish_data_v1');
+                    if(saved) customFishList.value = JSON.parse(saved);
+                };
+
+                const saveNewFish = () => {
+                    if(!newFish.value.name) return alert("请输入鱼的名字");
+                    if(newFish.value.weather.length === 0 || newFish.value.periods.length === 0) return alert("必须勾选至少一个天气和时段，否则它永远不会出现在实时列表中！");
+                    const fishToAdd = { ...newFish.value, isCustom: true };
+                    customFishList.value.push(fishToAdd);
+                    localStorage.setItem('mike_fish_data_v1', JSON.stringify(customFishList.value));
+                    newFish.value = { name: "", loc: "冰洞", rodType: "common", weather: [], periods: [] };
+                    showAddFish.value = false;
+                    alert("✅ 添加成功！\n注意：它只会在你勾选的时间和天气下显示。");
+                };
+
+                const deleteCustomFish = (name) => {
+                    if(confirm(`确定要删除 "${name}" 吗？`)) {
+                        customFishList.value = customFishList.value.filter(f => f.name !== name);
+                        localStorage.setItem('mike_fish_data_v1', JSON.stringify(customFishList.value));
+                    }
+                };
+
+                const getImageSrc = (name) => {
+                    if (tempImages.value[name]) return tempImages.value[name];
+                    return `./${name}.jpg`;
+                };
+                const handleImgError = (name) => { missingImages.value[name] = true; };
+
+                const openCropper = (name) => {
+                    currentCropFish.value = name;
+                    showCropper.value = true;
+                    nextTick(() => { if (cropperImg.value) drawCropperCanvas(); });
+                };
+                const loadCropperImage = (e) => {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        const img = new Image();
+                        img.onload = () => { cropperImg.value = img; drawCropperCanvas(); };
+                        img.src = evt.target.result;
+                    };
+                    reader.readAsDataURL(e.target.files[0]);
+                };
+                const drawCropperCanvas = () => {
+                    const canvas = document.getElementById('cropperCanvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = cropperImg.value.width;
+                    canvas.height = cropperImg.value.height;
+                    ctx.drawImage(cropperImg.value, 0, 0);
+                    document.getElementById('cropper-canvas-container').style.width = cropperImg.value.width + 'px';
+                    document.getElementById('cropper-canvas-container').style.height = cropperImg.value.height + 'px';
+                };
+                const moveCropBox = (e) => {
+                    if (!cropperImg.value) return;
+                    const box = document.getElementById('cropBox');
+                    const x = e.clientX - document.getElementById('cropperCanvas').getBoundingClientRect().left;
+                    const y = e.clientY - document.getElementById('cropperCanvas').getBoundingClientRect().top;
+                    box.style.display = 'block';
+                    box.style.left = (x - cropW.value/2) + 'px';
+                    box.style.top = (y - cropH.value/2) + 'px';
+                };
+                const hideCropBox = () => { document.getElementById('cropBox').style.display = 'none'; };
+                const executeCrop = (e) => {
+                    if (!cropperImg.value) return;
+                    const canvas = document.getElementById('cropperCanvas');
+                    const x = e.clientX - canvas.getBoundingClientRect().left - cropW.value/2;
+                    const y = e.clientY - canvas.getBoundingClientRect().top - cropH.value/2;
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = cropW.value; tempCanvas.height = cropH.value;
+                    tempCanvas.getContext('2d').drawImage(canvas, x, y, cropW.value, cropH.value, 0, 0, cropW.value, cropH.value);
+                    const base64 = tempCanvas.toDataURL('image/jpeg', 0.9);
+                    const link = document.createElement('a');
+                    link.download = `${currentCropFish.value}.jpg`;
+                    link.href = base64;
+                    link.click();
+                    tempImages.value[currentCropFish.value] = base64;
+                    missingImages.value[currentCropFish.value] = false;
+                    showCropper.value = false;
+                };
+
+                const filteredList = computed(() => {
+                    if (viewMode.value === 'all') return fishDatabase.value;
+                    if (!weather.value) return [];
+                    return fishDatabase.value.filter(fish => fish.periods.some(p => gamePeriod.value.includes(p)) && fish.weather.includes(weather.value));
+                });
+                const groupedList = computed(() => {
+                    const g = {}; filteredList.value.forEach(f => { if(!g[f.loc]) g[f.loc]=[]; g[f.loc].push(f); }); return g;
+                });
+                const getRodStyle = (t) => t==='common'?'rod-common':(t.includes('light')?(t.includes('ice')?'rod-ice-light':'rod-river-light'):(t.includes('ice')?'rod-ice-heavy':'rod-river-heavy'));
+                const getRodName = (t) => t==='common'?'通用':(t.includes('light')?'轻竿':'重竿');
+                const formatGamePeriod = (s) => s.split(' ')[0];
+
+                let timer;
+                onMounted(() => { 
+                    updateTime(); 
+                    loadCustomFish(); 
+                    timer = setInterval(updateTime, 1000); 
+                });
+                onUnmounted(() => clearInterval(timer));
+
+                return { 
+                    currentTimeStr, gamePeriod, minutesLeft, weather, filteredList, groupedList, 
+                    showMap, viewMode, toggleMode:()=>viewMode.value=viewMode.value==='live'?'all':'live', 
+                    fishDatabase, getRodStyle, getRodName, formatGamePeriod,
+                    getImageSrc, handleImgError, missingImages,
+                    showCropper, openCropper, currentCropFish, cropperImg, loadCropperImage,
+                    cropW, cropH, moveCropBox, hideCropBox, executeCrop,
+                    showAddFish, newFish, saveNewFish, deleteCustomFish,
+                    showHelp
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
